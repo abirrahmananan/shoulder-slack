@@ -1,3 +1,5 @@
+import { supabase } from "../lib/supabase";
+
 const ORDERS_STORAGE_KEY = "shoulder-slack-orders";
 
 export const getOrders = () => {
@@ -8,20 +10,80 @@ export const getOrders = () => {
   }
 };
 
-export const saveOrder = (order) => {
-  const orders = getOrders();
+const mapOrder = (order) => ({
+  id: order.id,
+  customerName: order.customer_name,
+  phone: order.phone,
+  address: order.address,
+  productName: order.product_name,
+  productImage: order.product_image,
+  quantity: order.quantity,
+  size: order.size,
+  unitPrice: Number(order.unit_price),
+  deliveryCharge: Number(order.delivery_charge),
+  total: Number(order.total),
+  status: order.status,
+  createdAt: order.created_at,
+});
+
+export const loadOrders = async () => {
+  if (!supabase) return getOrders();
+
+  const { data, error } = await supabase
+    .from("orders")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return data.map(mapOrder);
+};
+
+export const saveOrder = async (order) => {
   const savedOrder = {
     ...order,
-    id: `ORD-${Date.now()}`,
+    id: `ORD-${crypto.randomUUID()}`,
     status: "Pending",
     createdAt: new Date().toISOString(),
   };
 
-  localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify([savedOrder, ...orders]));
+  if (supabase) {
+    const { error } = await supabase.from("orders").insert({
+      id: savedOrder.id,
+      customer_name: savedOrder.customerName,
+      phone: savedOrder.phone,
+      address: savedOrder.address,
+      product_name: savedOrder.productName,
+      product_image: savedOrder.productImage,
+      quantity: savedOrder.quantity,
+      size: savedOrder.size,
+      unit_price: savedOrder.unitPrice,
+      delivery_charge: savedOrder.deliveryCharge,
+      total: savedOrder.total,
+    });
+
+    if (error) throw error;
+  } else {
+    const orders = getOrders();
+    localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify([savedOrder, ...orders]));
+  }
+
   return savedOrder;
 };
 
-export const updateOrderStatus = (orderId, status) => {
+export const updateOrderStatus = async (orderId, status) => {
+  if (supabase) {
+    const { data, error } = await supabase
+      .from("orders")
+      .update({ status })
+      .eq("id", orderId)
+      .select("id")
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data) throw new Error("Order not found or not allowed to update it.");
+    return loadOrders();
+  }
+
   const orders = getOrders().map((order) =>
     order.id === orderId ? { ...order, status } : order,
   );

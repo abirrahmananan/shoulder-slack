@@ -14,6 +14,8 @@ const CodFrom = () => {
   const [size, setSize] = useState("M");
   const [quantity, setQuantity] = useState(1);
   const [orderSuccess, setOrderSuccess] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [orderError, setOrderError] = useState("");
 
   useEffect(() => {
     if (!orderSuccess) return undefined;
@@ -26,24 +28,32 @@ const CodFrom = () => {
 
   const total = product.price * quantity + deliveryCharge;
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
     const formData = new FormData(e.currentTarget);
-    saveOrder({
-      customerName: formData.get("customerName"),
-      phone: formData.get("phone"),
-      address: formData.get("address"),
-      productName: product.name,
-      productImage: product.image,
-      quantity,
-      size: product.type === "shirt" ? size : null,
-      unitPrice: product.price,
-      deliveryCharge,
-      total,
-    });
-    e.currentTarget.reset();
-    setOrderSuccess(true);
+    setOrderError("");
+    setIsSubmitting(true);
+    try {
+      await saveOrder({
+        customerName: formData.get("customerName"),
+        phone: formData.get("phone"),
+        address: formData.get("address"),
+        productName: product.name,
+        productImage: product.image,
+        quantity,
+        size: product.type === "shirt" ? size : null,
+        unitPrice: product.price,
+        deliveryCharge,
+        total,
+      });
+      e.currentTarget.reset();
+      setOrderSuccess(true);
+    } catch (error) {
+      setOrderError(`Could not place your order: ${error.message}`);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -69,6 +79,11 @@ const CodFrom = () => {
         {orderSuccess && (
           <div role="status" aria-live="polite" className="mb-6 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-800">
             Order placed successfully. Thank you for your order.
+          </div>
+        )}
+        {orderError && (
+          <div role="alert" className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-800">
+            {orderError}
           </div>
         )}
 
@@ -264,10 +279,10 @@ const CodFrom = () => {
             {/* Submit */}
             <button
               type="submit"
-              disabled={orderSuccess}
+              disabled={orderSuccess || isSubmitting}
               className="w-full rounded-lg bg-red-600 px-5 py-3.5 text-base font-semibold text-white transition hover:bg-red-700 disabled:cursor-default disabled:bg-green-700"
             >
-              {orderSuccess ? "Order placed successfully" : `Place Order — ৳${total}`}
+              {isSubmitting ? "Placing order..." : orderSuccess ? "Order placed successfully" : `Place Order — ৳${total}`}
             </button>
 
           </div>

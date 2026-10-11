@@ -24,14 +24,39 @@ create table if not exists public.site_settings (
   value text not null
 );
 
+create table if not exists public.orders (
+  id text primary key,
+  customer_name text not null check (length(trim(customer_name)) > 0),
+  phone text not null check (length(trim(phone)) > 0),
+  address text not null check (length(trim(address)) > 0),
+  product_name text not null check (length(trim(product_name)) > 0),
+  product_image text,
+  quantity integer not null check (quantity > 0),
+  size text,
+  unit_price numeric(10, 2) not null check (unit_price > 0),
+  delivery_charge numeric(10, 2) not null check (delivery_charge >= 0),
+  total numeric(10, 2) not null check (total > 0),
+  status text not null default 'Pending'
+    check (status in ('Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelled')),
+  created_at timestamptz not null default now()
+);
+
 alter table public.products enable row level security;
 alter table public.store_admins enable row level security;
 alter table public.site_settings enable row level security;
+alter table public.orders enable row level security;
 grant select on public.products to anon, authenticated;
 grant insert, update, delete on public.products to authenticated;
 grant select on public.store_admins to authenticated;
 grant select on public.site_settings to anon, authenticated;
 grant insert, update on public.site_settings to authenticated;
+revoke all on public.orders from anon, authenticated;
+grant insert (
+  id, customer_name, phone, address, product_name, product_image,
+  quantity, size, unit_price, delivery_charge, total
+) on public.orders to anon, authenticated;
+grant select on public.orders to authenticated;
+grant update (status) on public.orders to authenticated;
 
 drop policy if exists "Products are publicly readable" on public.products;
 create policy "Products are publicly readable"
@@ -83,6 +108,25 @@ create policy "Store admins can insert site settings"
 drop policy if exists "Store admins can update site settings" on public.site_settings;
 create policy "Store admins can update site settings"
   on public.site_settings for update
+  to authenticated
+  using (exists (select 1 from public.store_admins where user_id = auth.uid()))
+  with check (exists (select 1 from public.store_admins where user_id = auth.uid()));
+
+drop policy if exists "Customers can place orders" on public.orders;
+create policy "Customers can place orders"
+  on public.orders for insert
+  to anon, authenticated
+  with check (status = 'Pending');
+
+drop policy if exists "Store admins can read orders" on public.orders;
+create policy "Store admins can read orders"
+  on public.orders for select
+  to authenticated
+  using (exists (select 1 from public.store_admins where user_id = auth.uid()));
+
+drop policy if exists "Store admins can update order status" on public.orders;
+create policy "Store admins can update order status"
+  on public.orders for update
   to authenticated
   using (exists (select 1 from public.store_admins where user_id = auth.uid()))
   with check (exists (select 1 from public.store_admins where user_id = auth.uid()));

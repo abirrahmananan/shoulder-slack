@@ -31,7 +31,7 @@ export const loadHeroImages = async () => {
   const fallbackImages = getHeroImages();
   const { data, error } = await supabase
     .from("site_settings")
-    .select("value")
+    .select("key, value")
     .in("key", [...HERO_SETTING_KEYS, "home_hero_image"]);
 
   if (error) throw error;

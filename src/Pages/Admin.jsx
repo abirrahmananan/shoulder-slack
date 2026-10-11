@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { getOrders, updateOrderStatus } from "../utils/orders";
+import { getOrders, loadOrders, updateOrderStatus } from "../utils/orders";
 import { addProduct, deleteProduct, getProducts, loadProducts, updateProduct, uploadProductImage } from "../utils/products";
 import { getHeroImages, loadHeroImages, saveHeroImages } from "../utils/siteSettings";
 import { supabase } from "../lib/supabase";
@@ -20,6 +20,9 @@ const Admin = () => {
   const [loginError, setLoginError] = useState(supabase ? "" : "Supabase is not configured. Check the VITE_SUPABASE environment variables.");
   const [activeMenu, setActiveMenu] = useState("Dashboard");
   const [orders, setOrders] = useState(getOrders);
+  const [ordersError, setOrdersError] = useState("");
+  const [hasLoadedOrders, setHasLoadedOrders] = useState(false);
+  const isLoadingOrders = isAuthenticated && !hasLoadedOrders;
   const [products, setProducts] = useState(getProducts);
   const [editingProduct, setEditingProduct] = useState(null);
   const [search, setSearch] = useState("");
@@ -104,6 +107,20 @@ const Admin = () => {
     if (!isAuthenticated) return undefined;
 
     let active = true;
+    loadOrders()
+      .then((savedOrders) => {
+        if (active) {
+          setOrders(savedOrders);
+          setOrdersError("");
+        }
+      })
+      .catch((error) => {
+        if (active) setOrdersError(`Could not load customer orders: ${error.message}`);
+      })
+      .finally(() => {
+        if (active) setHasLoadedOrders(true);
+      });
+
     loadProducts()
       .then((catalog) => {
         if (active) setProducts(catalog);
@@ -135,8 +152,13 @@ const Admin = () => {
       .includes(search.toLowerCase()),
   );
 
-  const handleStatusChange = (orderId, status) => {
-    setOrders(updateOrderStatus(orderId, status));
+  const handleStatusChange = async (orderId, status) => {
+    setOrdersError("");
+    try {
+      setOrders(await updateOrderStatus(orderId, status));
+    } catch (error) {
+      setOrdersError(`Could not update order status: ${error.message}`);
+    }
   };
 
   const handleAddProduct = async (event) => {
@@ -527,6 +549,7 @@ const Admin = () => {
           <div className="p-5 md:p-8">
 
             <div className="rounded-2xl bg-white p-6 shadow-sm">
+              {ordersError && <p role="alert" className="mb-4 text-sm text-red-600">{ordersError}</p>}
               <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row">
                 <h3 className="text-xl font-bold">
                   All Orders
@@ -557,6 +580,11 @@ const Admin = () => {
                     </tr>
                   </thead>
                   <tbody>
+                    {isLoadingOrders && (
+                      <tr className="border-t">
+                        <td colSpan="8" className="p-8 text-center text-gray-500">Loading customer orders...</td>
+                      </tr>
+                    )}
                     {filteredOrders.map((order) => (
                       <tr
                         key={order.id}
@@ -591,7 +619,7 @@ const Admin = () => {
                         </td>
                       </tr>
                     ))}
-                    {filteredOrders.length === 0 && (
+                    {!isLoadingOrders && filteredOrders.length === 0 && (
                       <tr className="border-t">
                         <td colSpan="8" className="p-8 text-center text-gray-500">
                           {orders.length === 0 ? "No customer orders yet." : "No matching orders."}
